@@ -8,9 +8,19 @@ Out-of-process Vortex plugin: **Home Assistant smart plugs → per-host power/en
 
 Follows [`VortexCore/docs/DAEMON_CREATORS.md`](../VortexCore/docs/DAEMON_CREATORS.md).
 
+**For agents:** full platform + handoff context → [`AGENTS.md`](./AGENTS.md).
+
 ## Install (Vortex Web)
 
-1. Settings → **Plugins** → paste [`vortex-plugin.json`](./vortex-plugin.json) → Install.
+Pack a ZIP (daemon code optional — Core ignores it):
+
+```bash
+cd vortex-plugin-ha-power
+zip -r ../ha-power-plugin.zip vortex-plugin.json schemas/
+# if you split UI out of the manifest later, also include ui/
+```
+
+1. Settings → **Plugins** → choose `ha-power-plugin.zip` → Install.
 2. Copy one-time `vxp_…` daemon token and note `install_id`.
 3. Edit each host → set **HA power entity** (e.g. `sensor.server_plug_power` or energy sensor).
 
