@@ -1,0 +1,171 @@
+{
+  "id": "com.vortex.ha_power",
+  "name": "HA Power",
+  "version": "1.0.0",
+  "api_version": 1,
+  "permissions": [
+    "host.bind",
+    "state.write",
+    "rpc",
+    "nav",
+    "pages",
+    "hosts.columns",
+    "hosts.panels",
+    "hosts.editor",
+    "settings"
+  ],
+  "config_schema": "schemas/settings.json",
+  "host_binding_schema": "schemas/host_binding.json",
+  "rpc": [
+    {
+      "method": "refresh"
+    },
+    {
+      "method": "list_entities"
+    }
+  ],
+  "ui": {
+    "contributions": [
+      {
+        "slot": "nav.items",
+        "id": "ha-nav",
+        "item": {
+          "label": "HA Power",
+          "icon": "bolt",
+          "route": "plugin:com.vortex.ha_power/home"
+        }
+      },
+      {
+        "slot": "routes",
+        "id": "ha-home",
+        "route": "plugin:com.vortex.ha_power/home",
+        "view": "ui/pages/home.json"
+      },
+      {
+        "slot": "hosts.table.columns",
+        "id": "power-w",
+        "column": {
+          "header": "Power",
+          "bind": "plugin.state.power_w",
+          "component": "metric",
+          "unit": "W"
+        }
+      },
+      {
+        "slot": "hosts.detail.panels",
+        "id": "power-panel",
+        "view": "ui/panels/host.json",
+        "requires_host_binding": true
+      },
+      {
+        "slot": "hosts.editor.fields",
+        "id": "ha-entity",
+        "schema": "schemas/host_binding.json"
+      },
+      {
+        "slot": "settings.tabs",
+        "id": "ha-settings",
+        "label": "HA Power",
+        "view": "ui/pages/settings.json"
+      }
+    ]
+  },
+  "views": {
+    "ui/pages/home.json": {
+      "type": "stack",
+      "children": [
+        {
+          "type": "text",
+          "text": "Home Assistant smart plugs \u2192 Vortex hosts. Bind entity_id in host Edit. Token stays on the daemon (HA_TOKEN)."
+        },
+        {
+          "type": "button",
+          "label": "Refresh all",
+          "action": "refresh"
+        },
+        {
+          "type": "button",
+          "label": "List HA entities",
+          "action": "list_entities"
+        },
+        {
+          "type": "text",
+          "bind": "action.result.count",
+          "visibleIf": "action.result.count"
+        }
+      ]
+    },
+    "ui/panels/host.json": {
+      "type": "panel",
+      "title": "HA Power",
+      "children": [
+        {
+          "type": "metric",
+          "label": "Power",
+          "bind": "plugin.state.power_w",
+          "unit": "W"
+        },
+        {
+          "type": "metric",
+          "label": "Today",
+          "bind": "plugin.state.energy_today_kwh",
+          "unit": "kWh"
+        },
+        {
+          "type": "metric",
+          "label": "Total",
+          "bind": "plugin.state.energy_kwh_total",
+          "unit": "kWh"
+        },
+        {
+          "type": "badge",
+          "bind": "plugin.state.entity_id"
+        },
+        {
+          "type": "button",
+          "label": "Refresh",
+          "action": "refresh"
+        }
+      ]
+    },
+    "ui/pages/settings.json": {
+      "type": "stack",
+      "children": [
+        {
+          "type": "text",
+          "text": "Daemon env: VORTEX_CORE_URL, VORTEX_INSTALL_ID, VORTEX_DAEMON_TOKEN, HA_URL, HA_TOKEN. Optional poll_interval_seconds in install config."
+        },
+        {
+          "type": "metric",
+          "label": "Bound hosts (from last refresh)",
+          "bind": "plugin.state.bound_count"
+        }
+      ]
+    }
+  },
+  "schemas": {
+    "schemas/settings.json": {
+      "type": "object",
+      "properties": {
+        "poll_interval_seconds": {
+          "type": "integer",
+          "title": "Poll interval (s)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "schemas/host_binding.json": {
+      "type": "object",
+      "properties": {
+        "entity_id": {
+          "type": "string",
+          "title": "HA entity_id"
+        }
+      },
+      "required": [
+        "entity_id"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
