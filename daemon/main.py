@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Vortex HA Power daemon — Home Assistant plugs → Core state + daily kWh."""
+"""Vortex HA Power daemon — Home Assistant plugs → Core state + daily kWh/cost."""
 
 from __future__ import annotations
 
@@ -16,8 +16,16 @@ import httpx
 # Allow `python -m daemon.main` from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from daemon.aggregator import daily_kwh_from_state, parse_plug_state, utc_today  # noqa: E402
+from daemon.aggregator import (  # noqa: E402
+    build_device_state,
+    parse_currency,
+    parse_plug_state,
+    parse_tariff,
+    utc_today,
+)
+from daemon.checkpoint import CheckpointStore  # noqa: E402
 from daemon.config import Settings, load_settings  # noqa: E402
+from daemon.device_resolve import resolve_device_entities  # noqa: E402
 from daemon.ha_client import HomeAssistantClient  # noqa: E402
 
 try:
@@ -33,7 +41,7 @@ class HaPowerDaemon:
         self.ha = HomeAssistantClient(
             settings.ha_url, settings.ha_token, verify=settings.verify_tls
         )
-        self._day_start_totals: dict[str, tuple[str, float]] = {}
+        self.checkpoints = CheckpointStore(settings.data_dir / "checkpoints.json")
 
     def _ws_url(self) -> str:
         u = urlparse(self.s.core_url)
@@ -75,52 +83,119 @@ class HaPowerDaemon:
         )
         r.raise_for_status()
 
-    async def push_daily(
+    async def push_daily_samples(
         self,
         client: httpx.AsyncClient,
-        host_id: str,
-        day: str,
-        value: float,
+        samples: list[dict[str, Any]],
     ) -> None:
+        if not samples:
+            return
         r = await client.post(
             f"{self.s.core_url}/api/v1/plugins/{self.s.install_id}/daemon/metrics/daily",
             headers=self._headers(),
-            json={
-                "samples": [
-                    {
-                        "host_id": host_id,
-                        "metric": "energy_kwh",
-                        "day": day,
-                        "value": round(value, 4),
-                    }
-                ]
-            },
+            json={"samples": samples},
             timeout=30.0,
         )
         r.raise_for_status()
 
-    def _today_from_total(self, host_id: str, total: float | None) -> float | None:
-        if total is None:
-            return None
-        day = utc_today().isoformat()
-        prev = self._day_start_totals.get(host_id)
-        if prev is None or prev[0] != day:
-            self._day_start_totals[host_id] = (day, total)
-            return 0.0
-        return max(0.0, total - prev[1])
-
     async def poll_once(self, client: httpx.AsyncClient) -> dict[str, Any]:
         bindings = await self.fetch_bindings(client)
+        ha_states = await self.ha.list_states(client)
+        states_by_id = {
+            str(s.get("entity_id", "")): s for s in ha_states if s.get("entity_id")
+        }
         today = utc_today().isoformat()
         bound = 0
+
         for b in bindings:
             host_id = str(b.get("host_id", ""))
             cfg = b.get("config") or {}
             entity_id = str(cfg.get("entity_id", "")).strip()
             if not host_id or not entity_id:
                 continue
+
+            tariff = parse_tariff(cfg.get("tariff"))
+            currency = parse_currency(cfg.get("currency"))
+            devices = resolve_device_entities(entity_id, ha_states)
+
             try:
-                raw = await self.ha.get_state(client, entity_id)
+                # Ensure bound entity is present (list_states can race); refresh missing.
+                needed = {
+                    devices.bound_entity_id,
+                    devices.power_id,
+                    devices.energy_id,
+                    devices.voltage_id,
+                    devices.current_id,
+                    devices.switch_id,
+                }
+                for eid in needed:
+                    if eid and eid not in states_by_id:
+                        states_by_id[eid] = await self.ha.get_state(client, eid)
+
+                energy_entity = states_by_id.get(devices.energy_id or "")
+                total = None
+                if energy_entity is not None:
+                    try:
+                        total = float(energy_entity.get("state"))
+                    except (TypeError, ValueError):
+                        total = None
+
+                today_kwh: float | None = None
+                month_kwh: float | None = None
+                if total is not None:
+                    periods = self.checkpoints.update_from_total(host_id, total)
+                    today_kwh = periods.today_kwh
+                    month_kwh = periods.month_kwh
+                else:
+                    # Attribute-rich single entity fallback (no sibling total sensor).
+                    bound_raw = states_by_id.get(entity_id)
+                    if bound_raw:
+                        legacy = parse_plug_state(bound_raw)
+                        if legacy.get("energy_kwh_total") is not None:
+                            periods = self.checkpoints.update_from_total(
+                                host_id, float(legacy["energy_kwh_total"])
+                            )
+                            today_kwh = periods.today_kwh
+                            month_kwh = periods.month_kwh
+                        elif legacy.get("energy_today_kwh") is not None:
+                            today_kwh = float(legacy["energy_today_kwh"])
+
+                state = build_device_state(
+                    devices=devices,
+                    states_by_id=states_by_id,
+                    today_kwh=today_kwh,
+                    month_kwh=month_kwh,
+                    tariff=tariff,
+                    currency=currency,
+                )
+                await self.push_state(client, state, host_id=host_id)
+
+                if today_kwh is not None:
+                    push_kwh = self.checkpoints.clamp_daily_push(
+                        host_id, today, float(today_kwh)
+                    )
+                    samples: list[dict[str, Any]] = [
+                        {
+                            "host_id": host_id,
+                            "metric": "energy_kwh",
+                            "day": today,
+                            "value": round(push_kwh, 4),
+                        }
+                    ]
+                    if tariff is not None:
+                        samples.append(
+                            {
+                                "host_id": host_id,
+                                "metric": "energy_cost",
+                                "day": today,
+                                "value": round(push_kwh * tariff, 4),
+                                "meta": {"currency": currency} if currency else {},
+                            }
+                        )
+                    await self.push_daily_samples(client, samples)
+                    self.checkpoints.mark_pushed(host_id, today, push_kwh)
+
+                bound += 1
             except Exception as exc:
                 print(f"HA error {entity_id}: {exc}", flush=True)
                 await self.push_state(
@@ -133,21 +208,6 @@ class HaPowerDaemon:
                     },
                     host_id=host_id,
                 )
-                continue
-
-            parsed = parse_plug_state(raw)
-            today_kwh = daily_kwh_from_state(parsed)
-            if today_kwh is None:
-                today_kwh = self._today_from_total(
-                    host_id, parsed.get("energy_kwh_total")
-                )
-                if today_kwh is not None:
-                    parsed["energy_today_kwh"] = round(today_kwh, 4)
-
-            await self.push_state(client, parsed, host_id=host_id)
-            if today_kwh is not None:
-                await self.push_daily(client, host_id, today, float(today_kwh))
-            bound += 1
 
         global_state = {
             "bound_count": bound,
@@ -224,6 +284,7 @@ class HaPowerDaemon:
             )
 
     async def run(self) -> None:
+        self.s.data_dir.mkdir(parents=True, exist_ok=True)
         async with httpx.AsyncClient(verify=self.s.verify_tls) as client:
             while True:
                 try:

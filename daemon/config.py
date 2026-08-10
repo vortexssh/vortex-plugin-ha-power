@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 
 class Settings:
@@ -16,6 +17,7 @@ class Settings:
             "false",
             "no",
         }
+        self.data_dir = Path(os.environ.get("VORTEX_DATA_DIR", "./data")).expanduser()
 
 
 def load_settings() -> Settings:

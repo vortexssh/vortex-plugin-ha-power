@@ -1,7 +1,21 @@
 {
   "type": "object",
   "properties": {
-    "entity_id": { "type": "string", "title": "HA entity_id" }
+    "entity_id": {
+      "type": "string",
+      "title": "HA entity_id"
+    },
+    "tariff": {
+      "type": "number",
+      "title": "Tariff per kWh",
+      "minimum": 0
+    },
+    "currency": {
+      "type": "string",
+      "title": "Currency",
+      "minLength": 1,
+      "maxLength": 8
+    }
   },
   "required": ["entity_id"],
   "additionalProperties": false

@@ -1,7 +1,7 @@
 {
   "id": "com.vortex.ha_power",
   "name": "HA Power",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "api_version": 1,
   "permissions": [
     "host.bind",
@@ -76,7 +76,7 @@
       "children": [
         {
           "type": "text",
-          "text": "Home Assistant smart plugs \u2192 Vortex hosts. Bind entity_id in host Edit. Token stays on the daemon (HA_TOKEN)."
+          "text": "Home Assistant smart plugs \u2192 Vortex hosts. Bind any device entity + per-host tariff in host Edit. Token stays on the daemon (HA_TOKEN)."
         },
         {
           "type": "button",
@@ -107,8 +107,26 @@
         },
         {
           "type": "metric",
+          "label": "Voltage",
+          "bind": "plugin.state.voltage_v",
+          "unit": "V"
+        },
+        {
+          "type": "metric",
+          "label": "Current",
+          "bind": "plugin.state.current_a",
+          "unit": "A"
+        },
+        {
+          "type": "metric",
           "label": "Today",
           "bind": "plugin.state.energy_today_kwh",
+          "unit": "kWh"
+        },
+        {
+          "type": "metric",
+          "label": "Month",
+          "bind": "plugin.state.energy_month_kwh",
           "unit": "kWh"
         },
         {
@@ -116,6 +134,20 @@
           "label": "Total",
           "bind": "plugin.state.energy_kwh_total",
           "unit": "kWh"
+        },
+        {
+          "type": "metric",
+          "label": "Cost today",
+          "bind": "plugin.state.cost_today"
+        },
+        {
+          "type": "metric",
+          "label": "Cost month",
+          "bind": "plugin.state.cost_month"
+        },
+        {
+          "type": "badge",
+          "bind": "plugin.state.currency"
         },
         {
           "type": "badge",
@@ -133,7 +165,7 @@
       "children": [
         {
           "type": "text",
-          "text": "Daemon env: VORTEX_CORE_URL, VORTEX_INSTALL_ID, VORTEX_DAEMON_TOKEN, HA_URL, HA_TOKEN. Optional poll_interval_seconds in install config."
+          "text": "Daemon env: VORTEX_CORE_URL, VORTEX_INSTALL_ID, VORTEX_DAEMON_TOKEN, HA_URL, HA_TOKEN, VORTEX_DATA_DIR. Per-host tariff/currency in host binding."
         },
         {
           "type": "metric",
@@ -160,6 +192,17 @@
         "entity_id": {
           "type": "string",
           "title": "HA entity_id"
+        },
+        "tariff": {
+          "type": "number",
+          "title": "Tariff per kWh",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "title": "Currency",
+          "minLength": 1,
+          "maxLength": 8
         }
       },
       "required": [

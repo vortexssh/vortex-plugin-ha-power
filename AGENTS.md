@@ -33,7 +33,10 @@ Canonical specs in Core (source of truth for the platform):
 
 **This plugin** (`com.vortex.ha_power`): Home Assistant power/energy sensors → Vortex hosts.
 
-- Binding: **1 HA `entity_id` ↔ 1 Vortex host** via `plugin_host_bindings.config.entity_id`.
+- Binding: **1 HA device entity ↔ 1 Vortex host** via `plugin_host_bindings.config` (`entity_id`, optional `tariff`, `currency`).
+- Daemon resolves sibling sensors (`*_power`, `*_total_energy`, `*_voltage`, `*_current`) by device prefix.
+- Period kWh = durable delta from `total_increasing` energy (local `VORTEX_DATA_DIR/checkpoints.json`).
+- Cost today/month computed on the daemon (`kWh × tariff`); Core only stores results.
 - `HA_TOKEN` stays on the daemon machine only (env). Never put HA secrets in `install.config`.
 
 ```text
@@ -63,33 +66,34 @@ vortex-plugin-ha-power/
   AGENTS.md                 ← you are here
   README.md                 ← human install / run
   Dockerfile                ← daemon image
-  docker-compose.yml        ← restart + env_file deploy
+  docker-compose.yml        ← restart + env_file + ./data volume
   .env.example              ← VORTEX_* + HA_* template
   vortex-plugin.json        ← manifest (views mostly inlined)
   schemas/
-    settings.json           ← install config schema (ha_url, interval; no token)
-    host_binding.json       ← { entity_id }
+    settings.json           ← install config schema (interval; no token)
+    host_binding.json       ← { entity_id, tariff?, currency? }
   requirements.txt
   daemon/
     main.py                 ← poll loop, WS RPC, Core HTTP
     config.py               ← env
     ha_client.py            ← HA REST
-    aggregator.py           ← parse state → daily kWh
+    device_resolve.py       ← sibling entity discovery by prefix
+    checkpoint.py           ← durable day/month baselines
+    aggregator.py           ← parse state → period kWh + cost
 ```
 
 Daemon env:
 
 - `VORTEX_CORE_URL`, `VORTEX_INSTALL_ID`, `VORTEX_DAEMON_TOKEN`
 - `HA_URL`, `HA_TOKEN`
-- optional: `VORTEX_POLL_INTERVAL`, `HA_VERIFY_TLS`
+- optional: `VORTEX_POLL_INTERVAL`, `HA_VERIFY_TLS`, `VORTEX_DATA_DIR` (default `./data`)
 
 RPC methods (manifest + daemon): `refresh`, `list_entities`.
 
 Live host state shape (approx):  
-`{ power_w, energy_kwh_total, energy_today_kwh, online, entity_id }`.
+`{ power_w, voltage_v, current_a, energy_kwh_total, energy_today_kwh, energy_month_kwh, cost_today, cost_month, tariff, currency, online, entity_id }`.
 
-Daily metric name: **`energy_kwh`** (upsert per host per UTC day).
-
+Daily metrics: **`energy_kwh`** and **`energy_cost`** (upsert per host per UTC day).
 ---
 
 ## Core APIs this plugin uses
@@ -189,13 +193,12 @@ Deploy reminder for ops: Core needs migration **0008/0009** (entrypoint runs `al
 
 ## Likely next work (not necessarily done)
 
-- Polish HA entity discovery / mapping (power sensor vs energy sensor vs switch attributes).
 - Day-boundary correctness across timezones (currently UTC-oriented).
 - Remove Web hardcoding of `com.vortex.ha_power` if more energy plugins appear (capability flag / metric convention).
 - GitHub publish of this repo; CI for daemon lint/tests.
 - Example ZIP in repo releases; systemd unit sample for the daemon.
 - Public page `?month=YYYY-MM` if needed (Core currently “current month”).
-
+- Show `energy_cost` on calendar / public page (metric already written by daemon).
 ---
 
 ## How to work here
