@@ -10,8 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY daemon/ ./daemon/
 
-RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin daemon \
-    && chown -R daemon:daemon /app
-USER daemon
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
 
 CMD ["python", "-m", "daemon.main"]
