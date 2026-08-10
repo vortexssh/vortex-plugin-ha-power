@@ -26,6 +26,21 @@ zip -r ../ha-power-plugin.zip vortex-plugin.json schemas/
 
 ## Run daemon
 
+### Docker (recommended)
+
+```bash
+cd vortex-plugin-ha-power
+cp .env.example .env
+# fill VORTEX_* and HA_* in .env
+
+docker compose up -d --build
+docker compose logs -f
+```
+
+If Home Assistant runs on the same host, set `HA_URL=http://host.docker.internal:8123` (compose already maps `host.docker.internal`). For LAN-only HA, use its IP/`homeassistant.local`, or uncomment `network_mode: host` in `docker-compose.yml`.
+
+### Local venv
+
 ```bash
 cd vortex-plugin-ha-power
 python3 -m venv .venv && source .venv/bin/activate

@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+*.md
+schemas
+vortex-plugin.json
+.gitignore
+.dockerignore
+docker-compose*.yml
+.env.example

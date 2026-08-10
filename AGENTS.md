@@ -62,6 +62,9 @@ Public /u/:slug ──no auth──► Core (billing + energy calendar for non-h
 vortex-plugin-ha-power/
   AGENTS.md                 ← you are here
   README.md                 ← human install / run
+  Dockerfile                ← daemon image
+  docker-compose.yml        ← restart + env_file deploy
+  .env.example              ← VORTEX_* + HA_* template
   vortex-plugin.json        ← manifest (views mostly inlined)
   schemas/
     settings.json           ← install config schema (ha_url, interval; no token)
@@ -106,7 +109,9 @@ User JWT:
 |--------|------|
 | GET | `/api/v1/plugins/{install_id}/metrics/daily?from=&to=&metric=energy_kwh&host_id=` |
 | POST | `/api/v1/plugins` JSON install |
-| POST | `/api/v1/plugins/install-package` multipart ZIP |
+| POST | `/api/v1/plugins/install-package` multipart ZIP (optional; Core may lag) |
+
+Web install: always unpacks ZIP in-browser (`materializePluginZip.ts`) → `POST /plugins` JSON. Does **not** depend on Core `/install-package`.
 
 ZIP install (`app/services/plugin_package.py`):
 
@@ -155,7 +160,11 @@ zip -r ../ha-power-plugin.zip vortex-plugin.json schemas/
 
 # Web: Settings → Plugins → upload zip → copy vxp_ token + install_id
 
-# Daemon
+# Daemon (Docker)
+cp .env.example .env   # fill VORTEX_* + HA_*
+docker compose up -d --build
+
+# Daemon (venv)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export VORTEX_CORE_URL=… VORTEX_INSTALL_ID=… VORTEX_DAEMON_TOKEN=vxp_…
@@ -163,7 +172,9 @@ export HA_URL=… HA_TOKEN=…
 python -m daemon.main
 ```
 
-Deploy reminder for ops: Core needs migration **0009** applied; Web must be rebuilt for ZIP install + EnergyCalendar + public billing/energy.
+Deploy reminder for ops: Core needs migration **0008/0009** (entrypoint runs `alembic upgrade head`); Web rebuild for ZIP install + EnergyCalendar + public billing/energy.
+
+**Prod gotcha (2026-08):** if `GET /api/v1/plugins` → 404 while `/me` works, Core on the VPS is stale. CI `git pull` used to fail on dirty `/opt/vortex-core` (local hotfixes). Fix: `git fetch && git reset --hard origin/master && docker compose up -d --build` (now in Core deploy workflow).
 
 ---
 

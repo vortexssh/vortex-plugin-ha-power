@@ -1,0 +1,15 @@
+services:
+  ha-power-daemon:
+    build: .
+    image: vortex-ha-power-daemon:latest
+    container_name: vortex-ha-power-daemon
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Reach HA / Core on the Docker host (Linux):
+    #   HA_URL=http://host.docker.internal:8123
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # If HA is only reachable on the LAN interface of this machine,
+    # prefer host networking instead of extra_hosts:
+    # network_mode: host
