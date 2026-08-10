@@ -1,7 +1,7 @@
 {
   "id": "com.vortex.ha_power",
   "name": "HA Power",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "api_version": 1,
   "permissions": [
     "host.bind",
@@ -44,6 +44,7 @@
       {
         "slot": "hosts.table.columns",
         "id": "power-w",
+        "requires_host_binding": true,
         "column": {
           "header": "Power",
           "bind": "plugin.state.power_w",
