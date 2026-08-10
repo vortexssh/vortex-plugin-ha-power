@@ -42,6 +42,7 @@ class HaPowerDaemon:
             settings.ha_url, settings.ha_token, verify=settings.verify_tls
         )
         self.checkpoints = CheckpointStore(settings.data_dir / "checkpoints.json")
+        self._poll_lock = asyncio.Lock()
 
     def _ws_url(self) -> str:
         u = urlparse(self.s.core_url)
@@ -99,6 +100,10 @@ class HaPowerDaemon:
         r.raise_for_status()
 
     async def poll_once(self, client: httpx.AsyncClient) -> dict[str, Any]:
+        async with self._poll_lock:
+            return await self._poll_once_unlocked(client)
+
+    async def _poll_once_unlocked(self, client: httpx.AsyncClient) -> dict[str, Any]:
         bindings = await self.fetch_bindings(client)
         ha_states = await self.ha.list_states(client)
         states_by_id = {
@@ -106,6 +111,7 @@ class HaPowerDaemon:
         }
         today = utc_today().isoformat()
         bound = 0
+        hosts_out: list[dict[str, Any]] = []
 
         for b in bindings:
             host_id = str(b.get("host_id", ""))
@@ -195,6 +201,15 @@ class HaPowerDaemon:
                     await self.push_daily_samples(client, samples)
                     self.checkpoints.mark_pushed(host_id, today, push_kwh)
 
+                hosts_out.append(
+                    {
+                        "host_id": host_id,
+                        "entity_id": entity_id,
+                        "power_w": state.get("power_w"),
+                        "energy_today_kwh": state.get("energy_today_kwh"),
+                        "online": state.get("online"),
+                    }
+                )
                 bound += 1
             except Exception as exc:
                 print(f"HA error {entity_id}: {exc}", flush=True)
@@ -208,9 +223,18 @@ class HaPowerDaemon:
                     },
                     host_id=host_id,
                 )
+                hosts_out.append(
+                    {
+                        "host_id": host_id,
+                        "entity_id": entity_id,
+                        "online": False,
+                        "error": str(exc),
+                    }
+                )
 
         global_state = {
             "bound_count": bound,
+            "hosts": hosts_out,
             "updated_at": datetime.now(UTC).isoformat(),
         }
         await self.push_state(client, global_state)
