@@ -1,7 +1,40 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
+
+
+def _dir_is_writable(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".vortex_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def resolve_data_dir(raw: str | None = None) -> Path:
+    """Prefer VORTEX_DATA_DIR; fall back if the mount is not writable (EACCES)."""
+    candidates: list[Path] = []
+    env = (raw if raw is not None else os.environ.get("VORTEX_DATA_DIR", "")).strip()
+    if env:
+        candidates.append(Path(env).expanduser())
+    candidates.append(Path("./data").resolve())
+    candidates.append(Path(tempfile.gettempdir()) / "vortex-ha-power")
+
+    for path in candidates:
+        if _dir_is_writable(path):
+            if env and path.resolve() != Path(env).expanduser().resolve():
+                print(
+                    f"VORTEX_DATA_DIR={env} not writable; using {path}",
+                    flush=True,
+                )
+            return path
+
+    return candidates[-1]
 
 
 class Settings:
@@ -17,7 +50,7 @@ class Settings:
             "false",
             "no",
         }
-        self.data_dir = Path(os.environ.get("VORTEX_DATA_DIR", "./data")).expanduser()
+        self.data_dir = resolve_data_dir()
 
 
 def load_settings() -> Settings:
