@@ -148,6 +148,17 @@
         },
         {
           "type": "badge",
+          "bind": "plugin.state.online",
+          "visibleIf": "plugin.state.online == false",
+          "tone": "warn"
+        },
+        {
+          "type": "text",
+          "bind": "plugin.state.error",
+          "visibleIf": "plugin.state.error"
+        },
+        {
+          "type": "badge",
           "bind": "plugin.state.currency"
         },
         {

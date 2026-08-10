@@ -116,7 +116,7 @@ class HaPowerDaemon:
         for b in bindings:
             host_id = str(b.get("host_id", ""))
             cfg = b.get("config") or {}
-            entity_id = str(cfg.get("entity_id", "")).strip()
+            entity_id = str(cfg.get("entity_id", "")).strip().lower()
             if not host_id or not entity_id:
                 continue
 
