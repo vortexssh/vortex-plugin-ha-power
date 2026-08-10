@@ -68,8 +68,15 @@ class CheckpointStore:
             "hosts": {hid: asdict(cp) for hid, cp in self._hosts.items()},
         }
         tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, self._path)
+        try:
+            tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            os.replace(tmp, self._path)
+        except OSError as exc:
+            # Keep in-memory baselines; surface once so UI/RPC can show a clear hint.
+            raise OSError(
+                f"Cannot write checkpoints to {self._path} ({exc}). "
+                "Fix volume ownership (chown 1000:1000 data/) or rebuild daemon image."
+            ) from exc
 
     def update_from_total(self, host_id: str, total: float, *, now: date | None = None) -> PeriodTotals:
         today = now or datetime.now(UTC).date()

@@ -39,6 +39,14 @@ docker compose logs -f
 
 Persists day/month baselines in `./data/checkpoints.json` (compose mounts `./data:/data`). Keep this volume across restarts so daily stats are not reset.
 
+If you see `Permission denied: '/data/checkpoints.tmp'`, the bind mount is root-owned. Rebuild the image (entrypoint chowns `/data`) or once on the host:
+
+```bash
+sudo chown -R 1000:1000 ./data
+docker compose up -d --build
+```
+
+
 If Home Assistant runs on the same host, set `HA_URL=http://host.docker.internal:8123` (compose already maps `host.docker.internal`). For LAN-only HA, use its IP/`homeassistant.local`, or uncomment `network_mode: host` in `docker-compose.yml`.
 
 ### Local venv
